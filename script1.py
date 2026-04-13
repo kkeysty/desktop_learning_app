@@ -1,3 +1,5 @@
+import os
+os.environ["PYTHONIOENCODING"] = "utf-8"
 import sys
 import time
 import openai
@@ -8,9 +10,46 @@ from PySide6.QtCore import QDir
 import csv
 import os
 import openai
+import io
 from openai import OpenAI
+#sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+#sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 #треш. я быдло ахахах
+
+class AIWorker(QtCore.QObject):
+    # Сигналы для передачи данных обратно в основной поток
+    finished = QtCore.Signal(str)
+    error = QtCore.Signal(str)
+
+    def __init__(self, test_summary, api_key):
+        super().__init__()
+        self.test_summary = test_summary
+        self.api_key = api_key
+
+    def run(self):
+        try:
+            client = OpenAI(
+                api_key=self.api_key,
+                base_url="https://openrouter.ai/api/v1",
+                default_headers = {
+                "HTTP-Referer": "http://localhost",  # Требование OpenRouter
+                "X-Title": "My Quiz App",
+            }
+            )
+            response = client.chat.completions.create(
+                model="z-ai/glm-4.5-air:free",
+                messages=[
+                    {"role": "system",
+                     "content": "Ты — ассистент-преподаватель. Проанализируй ошибки ученика и дай краткие рекомендации по темам. Не форматируй текст"},
+                    {"role": "user", "content": self.test_summary},
+                ],
+                stream=False
+            )
+            result = response.choices[0].message.content
+            self.finished.emit(result) # Отправляем результат
+        except Exception as e:
+            self.error.emit(str(e)) # Отправляем ошибку
 
 
 class MyWidget(QtWidgets.QWidget): #окно
@@ -80,6 +119,8 @@ class MyWidget(QtWidgets.QWidget): #окно
         self.decrease_timer = QtCore.QTimer(self)
         self.last_id = 0 #чтобы избегать совпадающих айди
 
+        self.recs_box = QtWidgets.QTextEdit("Анализирую результаты, подождите...", self)
+        self.recs_box.hide()
         self.user_progress_right = []
         self.user_progress_wrong = []
 
@@ -231,15 +272,34 @@ class MyWidget(QtWidgets.QWidget): #окно
         pr_box.setReadOnly(True)
         pr_box.show()
         self.buttons.append(pr_box)
-        recs = self.get_ai_recommendations()
-        recs_box = QtWidgets.QTextEdit(recs, self)
+        #recs = self.get_ai_recommendations()
+
+        recs_box = QtWidgets.QTextEdit("Анализирую результаты, подождите...", self)
         recs_box.move(50, 350)
         recs_box.resize(900, 350)
         recs_box.setStyleSheet("background: transparent; border: none; color: white;")
         recs_box.setFont(QtGui.QFont("Sylfaen", 24))
         recs_box.setReadOnly(True)
-        recs_box.show()
+        self.recs_box = recs_box
+        self.recs_box.show()
         self.buttons.append(recs_box)
+        test_summary = self.prepare_ai_prompt()  # Собираем текст для API
+
+        self.thread = QtCore.QThread()
+        self.worker = AIWorker(test_summary, "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")
+        self.worker.moveToThread(self.thread)
+
+        # Соединяем сигналы
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_ai_finished)
+        self.worker.error.connect(self.on_ai_error)
+
+        # Очистка памяти после завершения
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
     def prepare_ai_prompt(self):
         report = "Проанализируй результаты теста и дай краткие рекомендации:\n"
 
@@ -252,6 +312,18 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         return report
 
+
+    def on_ai_finished(self, text):
+        self.recs_box.setText(text)
+        self.recs_box.setStyleSheet("background: transparent; border: none; color: white;")
+
+    # Слот для ошибки
+    def on_ai_error(self, error_message):
+        print(f"Ошибка AI: {error_message}")
+
+
+
+
     def get_ai_recommendations(self):
         # 1. Формируем список вопросов и ответов для анализа
         test_summary = "Результаты теста:\n"
@@ -262,8 +334,12 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         # 2. Инициализируем клиента DeepSeek
         client = OpenAI(
-            api_key = "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",
-            base_url = "https://openrouter.ai/api/v1"
+            api_key = "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",
+            base_url = "https://openrouter.ai/api/v1",
+            default_headers = {
+            "HTTP-Referer": "http://localhost",  # Требование OpenRouter
+            "X-Title": "My Quiz App",
+        }
             # base_url удаляем или комментируем
         )
 
@@ -272,15 +348,43 @@ class MyWidget(QtWidgets.QWidget): #окно
                 #model="nvidia/nemotron-3-super-120b-a12b:free",  # Или deepseek-reasoner для более глубокой аналитики
                 model="z-ai/glm-4.5-air:free",
                 messages=[
+
                     {"role": "system",
+
                      "content": "Ты — ассистент-преподаватель. Проанализируй ошибки ученика и дай краткие рекомендации по темам. Не форматируй текст"},
+
                     {"role": "user", "content": test_summary},
+
                 ],
                 stream=False
             )
             return response.choices[0].message.content
         except Exception as e:
             return f"Не удалось связаться с AI: {str(e)}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
