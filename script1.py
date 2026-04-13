@@ -232,8 +232,14 @@ class MyWidget(QtWidgets.QWidget): #окно
         pr_box.show()
         self.buttons.append(pr_box)
         recs = self.get_ai_recommendations()
-        print(recs)
-
+        recs_box = QtWidgets.QTextEdit(recs, self)
+        recs_box.move(50, 350)
+        recs_box.resize(900, 350)
+        recs_box.setStyleSheet("background: transparent; border: none; color: white;")
+        recs_box.setFont(QtGui.QFont("Sylfaen", 24))
+        recs_box.setReadOnly(True)
+        recs_box.show()
+        self.buttons.append(recs_box)
     def prepare_ai_prompt(self):
         report = "Проанализируй результаты теста и дай краткие рекомендации:\n"
 
@@ -244,7 +250,7 @@ class MyWidget(QtWidgets.QWidget): #окно
             report += f"- Вопрос: {q_data['text']}\n"
             report += f"  Результат: {status}\n"
 
-            return report
+        return report
 
     def get_ai_recommendations(self):
         # 1. Формируем список вопросов и ответов для анализа
@@ -256,23 +262,25 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         # 2. Инициализируем клиента DeepSeek
         client = OpenAI(
-            api_key="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",
-            base_url="https://api.deepseek.com"
+            api_key = "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",
+            base_url = "https://openrouter.ai/api/v1"
+            # base_url удаляем или комментируем
         )
 
         try:
             response = client.chat.completions.create(
-                model="deepseek-chat",  # Или deepseek-reasoner для более глубокой аналитики
+                #model="nvidia/nemotron-3-super-120b-a12b:free",  # Или deepseek-reasoner для более глубокой аналитики
+                model="z-ai/glm-4.5-air:free",
                 messages=[
                     {"role": "system",
-                     "content": "Ты — ассистент-преподаватель. Проанализируй ошибки ученика и дай краткие рекомендации по темам."},
+                     "content": "Ты — ассистент-преподаватель. Проанализируй ошибки ученика и дай краткие рекомендации по темам. Не форматируй текст"},
                     {"role": "user", "content": test_summary},
                 ],
                 stream=False
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Не удалось связаться с DeepSeek: {str(e)}"
+            return f"Не удалось связаться с AI: {str(e)}"
 
 
 
