@@ -1,6 +1,8 @@
 import os
 os.environ["PYTHONIOENCODING"] = "utf-8"
 import sys
+from dotenv import load_dotenv
+from openai import OpenAI
 import time
 import openai
 from functools import partial
@@ -8,7 +10,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import QPoint
 from PySide6.QtCore import QDir
 import csv
-import os
+load_dotenv()
 import openai
 import io
 from openai import OpenAI
@@ -286,7 +288,10 @@ class MyWidget(QtWidgets.QWidget): #окно
         test_summary = self.prepare_ai_prompt()  # Собираем текст для API
 
         self.thread = QtCore.QThread()
-        self.worker = AIWorker(test_summary, "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")
+
+
+
+        self.worker = AIWorker(test_summary, os.getenv('OPENROUTER_API_KEY'))
         self.worker.moveToThread(self.thread)
 
         # Соединяем сигналы
@@ -322,47 +327,7 @@ class MyWidget(QtWidgets.QWidget): #окно
         print(f"Ошибка AI: {error_message}")
 
 
-
-
-    def get_ai_recommendations(self):
-        # 1. Формируем список вопросов и ответов для анализа
-        test_summary = "Результаты теста:\n"
-        for q_id in self.question_ids:
-            q_data = self.all_questions[q_id]
-            status = "Верно" if q_id in self.user_progress_right else "Ошибка"
-            test_summary += f"- Вопрос: {q_data['text']}. Результат: {status}\n"
-
-        # 2. Инициализируем клиента DeepSeek
-        client = OpenAI(
-            api_key = "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",
-            base_url = "https://openrouter.ai/api/v1",
-            default_headers = {
-            "HTTP-Referer": "http://localhost",  # Требование OpenRouter
-            "X-Title": "My Quiz App",
-        }
-            # base_url удаляем или комментируем
-        )
-
-        try:
-            response = client.chat.completions.create(
-                #model="nvidia/nemotron-3-super-120b-a12b:free",  # Или deepseek-reasoner для более глубокой аналитики
-                model="z-ai/glm-4.5-air:free",
-                messages=[
-
-                    {"role": "system",
-
-                     "content": "Ты — ассистент-преподаватель. Проанализируй ошибки ученика и дай краткие рекомендации по темам. Не форматируй текст"},
-
-                    {"role": "user", "content": test_summary},
-
-                ],
-                stream=False
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Не удалось связаться с AI: {str(e)}"
-
-
+### ДАЛЬШЕ ТОКА МУСОР !!!
 
 
 
