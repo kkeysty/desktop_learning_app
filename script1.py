@@ -2,7 +2,6 @@ import os
 os.environ["PYTHONIOENCODING"] = "utf-8"
 import sys
 from dotenv import load_dotenv
-from openai import OpenAI
 import time
 import openai
 from functools import partial
@@ -11,26 +10,28 @@ from PySide6.QtCore import QPoint
 from PySide6.QtCore import QDir
 import csv
 load_dotenv()
-import openai
 import io
 from openai import OpenAI
-#sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-#sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+import sqlite3
+import shiboken6 as shiboken # Вот так он обычно импортируется в PySide6
+
 
 #треш. я быдло ахахах
 
 class AIWorker(QtCore.QObject):
     # Сигналы для передачи данных обратно в основной поток
-    finished = QtCore.Signal(str)
-    error = QtCore.Signal(str)
+    finished = QtCore.Signal(str) #работа закончилась
+    error = QtCore.Signal(str) #работа завершилась с ошибкой
 
+    #инициализация
     def __init__(self, test_summary, api_key):
         super().__init__()
-        self.test_summary = test_summary
-        self.api_key = api_key
+        self.test_summary = test_summary #итоги теста (промпт)
+        self.api_key = api_key #API ключ из env файла, в идеале подгружается из облака
 
     def run(self):
         try:
+            #говорим, к кому обращаемся (open router)
             client = OpenAI(
                 api_key=self.api_key,
                 base_url="https://openrouter.ai/api/v1",
@@ -38,6 +39,8 @@ class AIWorker(QtCore.QObject):
                 "HTTP-Referer": "http://localhost",  # Требование OpenRouter
                 "X-Title": "My Quiz App",
             }
+
+            #генерируем промпт
             )
             response = client.chat.completions.create(
                 model="z-ai/glm-4.5-air:free",
@@ -57,78 +60,135 @@ class AIWorker(QtCore.QObject):
 class MyWidget(QtWidgets.QWidget): #окно
     def __init__(self):
         super().__init__()
+        self.resize(1000, 800)
+        self.setFixedSize(1000, 800)
 
-        #все элементы окна, здесь сразу инициализируются для первой страницы
+        # 1. Создаем StackedWidget
+        self.stacked_widget = QtWidgets.QStackedWidget(self)
 
-        #задаём background label, будет на каждой странице
-        self.background_label = QtWidgets.QLabel(self)
-        self.background_label.setGeometry(0, 0, 1000, 800)  # Размеры как у окна
-        self.background_label.setStyleSheet("background-color: #7393b3;")
+        # Основной Layout для всего окна
+        self.main_layout = QtWidgets.QVBoxLayout(self)
+        self.main_layout.addWidget(self.stacked_widget)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
 
-        #задаём QPushButtons, будут только на главной странице
-        self.button1 = QtWidgets.QPushButton("Скачать дополнительные материалы", self)
-        self.button2 = QtWidgets.QPushButton("Начать тест",self)
+            # 2. Создаем страницы
+        self.page_main = QtWidgets.QWidget()
+        self.page_dirs = QtWidgets.QWidget()
+        self.page_test = QtWidgets.QWidget()
+        self.page_results = QtWidgets.QWidget()
 
-        #счётчик для всего подряд
-        self.k = 0
+            # Добавляем их в стек
+        self.stacked_widget.addWidget(self.page_main)  # Индекс 0
+        self.stacked_widget.addWidget(self.page_dirs)
+        self.stacked_widget.addWidget(self.page_test)  # Индекс 2
+        self.stacked_widget.addWidget(self.page_results)  # Индекс 3
 
-        #добавление кнопок и текста в лэйаут
-        self.resize(1000,800)
-        self.layout = QtWidgets.QHBoxLayout(self)
+            # Инициализируем интерфейс каждой страницы
+        self.setup_main_page()
+        #self.setup_test_page()
 
-        # Список для хранения ссылок на кнопки
-        self.buttons = []
+        self.all_questions = {} #вопросы, взятые из csv файла
+        self.question_ids = [] #их айди
+        self.current_index = 0 #индекс текущего вопроса (не айди!)
+        self.user_progress_right = []
+        self.user_progress_wrong = []
+        self.last_id = 0 #чтобы избегать совпадающих айди ???
+
+        self.recs_box = QtWidgets.QTextEdit()
+        self.recs_box.hide()
+
+            # Показываем главную
+        self.stacked_widget.setCurrentIndex(0)
+
+    def clear_layout(self, layout):
+        if layout is not None:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+                else:
+                    self.clear_layout(item.layout())
+
+
+
+    def setup_main_page(self):
+        #layout = QtWidgets.QVBoxLayout(self.page_main)
+
+        self.stacked_widget.setCurrentIndex(0)
+
+        self.page_main.setStyleSheet("background-color: #7393b3;")
+
+        main_layout = QtWidgets.QVBoxLayout(self.page_main)
+        main_layout.setContentsMargins(50, 100, 50, 50)  # Отступы от краев окна
+        main_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        title = QtWidgets.QTextEdit("Добро пожаловать!",self)
+        title.move(200,100)
+        title.resize(700, 150)  # размеры
+        title.setFont(QtGui.QFont("Sylfaen", 52, italic = True))
+        title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        title.setTextColor("#F0F8FF")
+        title.setStyleSheet("background-color: rgba(255, 0, 0, 0); border:  none"); #последний параметр rgba - прозрачность
+        title.setReadOnly(True)  # Запрет на изменение текста
+        main_layout.addWidget(title)
+
+        main_layout.addStretch(1)
+
+        button_layout = QtWidgets.QHBoxLayout()
+
+        button1 = QtWidgets.QPushButton("Скачать дополнительные материалы", self)
+        button2 = QtWidgets.QPushButton("Начать тест", self)
 
         font = QtGui.QFont()
         font.setFamily("Bookman Old Style")  # Название шрифта
         font.setPointSize(14)  # Размер шрифта
-        self.button1.setFont(font)
-        self.button2.setFont(font)
-        self.button1.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
-        self.button2.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
-        self.button1.move(50, 700)
-        self.button2.move(550, 700)
-        self.button1.setFixedSize(400, 50)
-        self.button2.setFixedSize(400, 50)
+        button1.setFont(font)
+        button2.setFont(font)
+        button1.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
+        button2.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
+        button1.move(50, 700)
+        button2.move(550, 700)
+        button1.setFixedSize(400, 50)
+        button2.setFixedSize(400, 50)
 
-        #коннект
-        self.button1.clicked.connect(self.check_action)
-        self.button2.clicked.connect(self.tests_menu)
+        button1.clicked.connect(self.check_action)
+        button2.clicked.connect(self.tests_menu)
 
-        #ещё одна пушбаттон, скорее всего можно было обойтись без неё
-        #просто переделать существующие
-        self.button_push = QtWidgets.QPushButton("Go out", self)
-        self.button_push.hide()
+        button_layout.addWidget(button1)
+        button_layout.addSpacing(50)  # Расстояние между кнопками
+        button_layout.addWidget(button2)
 
-        #строка прогресса
-        self.prog_bar = QtWidgets.QProgressBar(self)
-        self.prog_bar.hide()
+        # Добавляем слой с кнопками в основной слой
+        main_layout.addLayout(button_layout)
 
-        #текст
-        self.question = QtWidgets.QTextEdit("Добро пожаловать!",self)
-        self.question.move(200,100)
-        self.question.resize(700, 150)  # размеры
-        self.question.setFont(QtGui.QFont("Sylfaen", 52, italic = True))
-        self.question.setTextColor("#F0F8FF")
-        self.question.setStyleSheet("background-color: rgba(255, 0, 0, 0); border:  none"); #последний параметр - прозрачность
-        self.question.setReadOnly(True)  # Запрет на изменение текста
-        self.question.show()
-
-        self.all_questions = {}
-        self.question_ids = []
-        self.current_index = 0
-        #таймер (нужен для строки прогресса)
-        self.decrease_timer = QtCore.QTimer(self)
-        self.last_id = 0 #чтобы избегать совпадающих айди
-
-        self.recs_box = QtWidgets.QTextEdit("Анализирую результаты, подождите...", self)
-        self.recs_box.hide()
+        self.all_questions = {} #вопросы, взятые из csv файла
+        self.question_ids = [] #их айди
+        self.current_index = 0 #индекс текущего вопроса (не айди!)
         self.user_progress_right = []
         self.user_progress_wrong = []
+        self.last_id = 0 #чтобы избегать совпадающих айди ???
+
 
 
     #выводит скачанные модули вопросов
     def tests_menu(self):
+
+        self.stacked_widget.setCurrentIndex(1)
+        self.page_dirs.setStyleSheet("background-color: #7393b3;")
+
+        main_layout = QtWidgets.QVBoxLayout(self.page_dirs)
+        title = QtWidgets.QTextEdit("Выберите тему:", self)
+        title.move(200, 100)
+        title.resize(700, 150)  # размеры
+        title.setFont(QtGui.QFont("Sylfaen", 52, italic=True))
+        title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        title.setTextColor("#F0F8FF")
+        title.setStyleSheet( "background-color: rgba(255, 0, 0, 0); border:  none");  # последний параметр rgba - прозрачность
+        title.setReadOnly(True)  # Запрет на изменение текста
+        main_layout.addWidget(title)
+
+
         #кнопка set directory
         path = "./"
         directory = QDir(path)
@@ -141,74 +201,88 @@ class MyWidget(QtWidgets.QWidget): #окно
         width = 1000;
         height = 800;
         height -= 350;
-        one_step = height / (len(dir_list) - 1) if len(dir_list) > 1 else 1
-        #пряяем кнопки
-        self.button2.hide()
-        self.button1.hide()
-        self.question.hide()
+
+        button_layout = QtWidgets.QVBoxLayout()
+
         for i in range(len(dir_list)):
             # 1. Создаем кнопку и сразу передаем текст из списка
             button = QtWidgets.QPushButton(dir_list[i], self)
-
-            # 2. Рассчитываем позицию Y (индекс * шаг)
-            y_position = int(i * one_step) + 200
-
             # 3. Устанавливаем размер и положение кнопки
-            button.setFixedWidth(500)
+            button.setFixedWidth(400)
             button.setFixedHeight(80)
-            button.move(50, y_position)  # x=50, y=рассчитанный шаг
+            button_layout.addWidget(button)
             button.clicked.connect(partial(self.start_test, dir_list[i]))
-            button.show()
-            self.buttons.append(button)
+
+        main_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        main_layout.addLayout(button_layout)
 
 
-
-        print(dir_list)
 
 #функция начала теста
     def start_test(self, dir_path):
         print(dir_path)
         dir = QDir(dir_path)
-        filters = QDir.Files | QDir.NoDotAndDotDot
-        dir.setNameFilters({"*.csv"})
-        files_list = dir.entryList(filters)
 
+        conn = sqlite3.connect('project.db')
+        cursor = conn.cursor()
 
-        os.chdir(dir_path)
-        with open(files_list[0], mode='r', encoding='utf-8', newline='') as file:
-            reader = csv.reader(file)
-            count = 0
+        try:
+            # SQL-запрос, который выбирает все нужные поля из таблицы вопросов
+            # Если вам нужны вопросы только по конкретной теме, добавьте: WHERE topic_id = ?
+            query = "SELECT id, topic_id, question_text, answers_json, true_answer FROM questions"
+            cursor.execute(query)
+
+            rows = cursor.fetchall()
             questions_dict = {}
-            for rowd in reader:
-                #print(rowd)  # row - это список значений
-                row = rowd[0].split(";")
-                if count >= 1:
-                    questions_dict[str(row[0])] = {
-                        "text": row[1],
-                        "audio" : row[2],
-                        "video" : row[3],
-                        "photo": row[4],
-                        "answers": row[5],
-                        "true_answer": row[6]
-                    }
-                    print(questions_dict)
-                    self.all_questions = questions_dict
-                    self.question_ids = list(questions_dict.keys())
-                    self.current_index = 0
-                    self.displayQA()  # Вызываем без аргументов, берем данные из self
-                count += 1
-            #print(questions_dict)
 
-        os.chdir("../")
+            for row in rows:
+                # row[0] - это id, который теперь берется прямо из базы (PRIMARY KEY)
+                questions_dict[str(row[0])] = {
+                    "id": row[0],  # Сохраняем собственный ID
+                    "topic_id": row[1], "question_text": row[2],
+                    "text": row[2],  # question_text
+                    "answers": row[3],  # варианты ответов
+                    "true_answer": row[4]
+                }
+
+            self.all_questions = questions_dict
+            self.question_ids = list(questions_dict.keys())
+            self.current_index = 0
+
+            if self.question_ids:
+                self.displayQA()
+
+        finally:
+            conn.close()  # Всегда закрываем соединение
+        #os.chdir("../")
         return
 
     def displayQA(self):
-        # 1. Очистка старых виджетов
-        if len(self.buttons) > 0:
-            for obj in self.buttons:
-                obj.hide()
-                obj.deleteLater()
-        self.buttons = []
+
+        self.stacked_widget.setCurrentIndex(2)
+        # --- ПОЛНАЯ ОЧИСТКА ---
+        # --- ОЧИСТКА ДЛЯ PYSIDE6 ---
+
+        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
+        if self.page_test.layout() is not None:
+            old_layout = self.page_test.layout()
+
+            # Удаляем все виджеты
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                elif item.layout():
+                    self.clear_layout(item.layout())  # Вызываем ваш вспомогательный метод
+
+            # Вместо shiboken.delete мы "переносим" лайаут на временный объект,
+            # который тут же уничтожится, забирая лайаут с собой.
+            QtWidgets.QWidget().setLayout(old_layout)
+
+        self.page_test.setStyleSheet("background-color: #7393b3;")
+        main_layout = QtWidgets.QVBoxLayout(self.page_test)
 
         # Проверка: остались ли еще вопросы?
         if self.current_index >= len(self.question_ids):
@@ -220,91 +294,140 @@ class MyWidget(QtWidgets.QWidget): #окно
         q_data = self.all_questions[str(current_id)]
 
         # 3. Отрисовка вопроса
-        self.question.setText(q_data["text"].strip('"'))
-        self.question.move(100, 50)
-        self.question.show()
+        question = QtWidgets.QTextEdit(q_data["text"].strip('"'))
+        question.setFont(QtGui.QFont("Sylfaen", 32, italic=True))
+        question.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        question.setTextColor("#F0F8FF")
+        question.setStyleSheet( "background-color: rgba(255, 0, 0, 0); border:  none");  # последний параметр rgba - прозрачность
+        question.setReadOnly(True)  # Запрет на изменение текста
+        question.setFixedHeight(250)  # размеры
+        main_layout.addWidget(question)
+        main_layout.setContentsMargins(0, 50, 0, 0)
 
         # 4. Отрисовка кнопок ответов
         answers_list = q_data["answers"].split("|")
         width, height = 1000, 800
         work_height = height - 350
-        one_step = work_height / (max(1, len(answers_list) - 1))
+
+        button_layout = QtWidgets.QVBoxLayout()
 
         for i in range(len(answers_list)):
             button = QtWidgets.QPushButton(answers_list[i], self)
-            y_position = int(i * one_step) + 200
             button.setFixedWidth(500)
-            button.setFixedHeight(80)
-            button.move(width / 2 - 250, y_position)
-
+            button.setFixedHeight(70)
+            button.setFont(QtGui.QFont("Sylfaen", 14))
+            button_layout.addWidget(button)
             # Важно: передаем индекс i, чтобы потом проверить правильность
             button.clicked.connect(partial(self.check_answer, q_data, i))
-            button.show()
-            self.buttons.append(button)
+
+        main_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        button_layout.setContentsMargins(0, 0, 0, 150)
+        main_layout.addLayout(button_layout)
+        # 3. Устанавливаем размер и положение кнопки
+
+
 
         # 5. Прогресс-бар (PRbox)
         pr_text = f"Вопрос {self.current_index + 1} из {len(self.all_questions)}"
-        pr_box = QtWidgets.QTextEdit(pr_text, self)
-        pr_box.move(0, 750)
-        pr_box.resize(500, 50)
-        pr_box.setStyleSheet("background: transparent; border: none; color: white;")
-        pr_box.setFont(QtGui.QFont("Sylfaen", 14))
-        pr_box.setReadOnly(True)
-        pr_box.show()
-        self.buttons.append(pr_box)
+        prog_box = QtWidgets.QTextEdit(pr_text)
+        prog_box.setText(pr_text)
+        main_layout.addWidget(prog_box)
 
     def check_answer(self, que, n):
-        tr_an = que["true_answer"]
+        tr_an = str(que["true_answer"])
         if ( que["answers"].split("|") )[n] == tr_an:
             self.user_progress_right.append(self.question_ids[self.current_index])
         else:
             self.user_progress_wrong.append(self.question_ids[self.current_index])
+
         self.current_index += 1
         self.displayQA()
-        print(self.user_progress_right)
+        #(self.user_progress_right)
         return
 
     def end_of_the_test(self):
-        pr_text = f"Статистика: {( len(self.user_progress_right)/len(self.question_ids) ) * 100}% правильных ответов"
-        pr_box = QtWidgets.QTextEdit(pr_text, self)
-        pr_box.move(100, 250)
-        pr_box.resize(1000, 50)
-        pr_box.setStyleSheet("background: transparent; border: none; color: white;")
-        pr_box.setFont(QtGui.QFont("Sylfaen", 24))
-        pr_box.setReadOnly(True)
-        pr_box.show()
-        self.buttons.append(pr_box)
-        #recs = self.get_ai_recommendations()
 
-        recs_box = QtWidgets.QTextEdit("Анализирую результаты, подождите...", self)
-        recs_box.move(50, 350)
-        recs_box.resize(900, 350)
-        recs_box.setStyleSheet("background: transparent; border: none; color: white;")
-        recs_box.setFont(QtGui.QFont("Sylfaen", 24))
-        recs_box.setReadOnly(True)
-        self.recs_box = recs_box
-        self.recs_box.show()
-        self.buttons.append(recs_box)
+        # Проверяем, что thread существует, это именно объект QThread, и он запущен
+        if hasattr(self, 'thread') and isinstance(self.thread, QtCore.QThread):
+            if self.thread.isRunning():
+                self.thread.quit()
+                self.thread.wait()
+
+        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
+            # 2. Правильная очистка страницы результатов
+        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
+        if self.page_test.layout() is not None:
+            old_layout = self.page_test.layout()
+
+            # Удаляем все виджеты
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                elif item.layout():
+                    self.clear_layout(item.layout())  # Вызываем ваш вспомогательный метод
+
+            # Вместо shiboken.delete мы "переносим" лайаут на временный объект,
+            # который тут же уничтожится, забирая лайаут с собой.
+            QtWidgets.QWidget().setLayout(old_layout)
+
+        self.stacked_widget.setCurrentIndex(3)
+        self.page_results.setStyleSheet("background-color: #7393b3;")
+
+        main_layout = QtWidgets.QVBoxLayout(self.page_results)
+        pr_text = f"Результат: {(len(self.user_progress_right) / len(self.question_ids)) * 100}% правильных ответов"
+        res_box = QtWidgets.QTextEdit(pr_text)
+        res_box.setFixedHeight(150)
+        res_box.setFont(QtGui.QFont("Sylfaen", 34))
+        res_box.move(50, 100)
+        main_layout.addWidget(res_box)
+
+        self.recs_box = QtWidgets.QTextEdit("Обработка результатов, подождите...")
+        self.recs_box.setFixedHeight(500)  # Это ограничит его рост вверх
+        self.recs_box.setFont(QtGui.QFont("Sylfaen", 22))
+        self.recs_box.setReadOnly(True)
+        self.recs_box.setStyleSheet(
+                "background: rgba(255, 255, 255, 30); border-radius: 10px; color: white; padding: 10px;")
+        main_layout.addWidget(self.recs_box)
+
+        # кнопка возвращения на главный экран
+        ret_button = QtWidgets.QPushButton("Вернуться в главное меню")
+        ret_button.setFixedHeight(50)
+        ret_button.setFont(QtGui.QFont("Sylfaen", 14))
+        ret_button.clicked.connect(self.setup_main_page)
+        main_layout.addWidget(ret_button)
+
+        main_layout.setContentsMargins(30, 30, 30, 30)
+
+        self.page_results.update()  # Перерисовать виджет
+        self.page_results.repaint()  # Немедленно обновить (форсированно)
+        QtWidgets.QApplication.processEvents()  # Обработать все скопившиеся события отрисовки
+
+
         test_summary = self.prepare_ai_prompt()  # Собираем текст для API
 
+            # запускаем, чтобы во время ожидания API ответа программа не замораживалась
         self.thread = QtCore.QThread()
-
-
 
         self.worker = AIWorker(test_summary, os.getenv('OPENROUTER_API_KEY'))
         self.worker.moveToThread(self.thread)
 
-        # Соединяем сигналы
+            # Соединяем сигналы
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.on_ai_finished)
         self.worker.error.connect(self.on_ai_error)
 
-        # Очистка памяти после завершения
+            # Очистка памяти после завершения
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
         self.thread.start()
+
+
+
     def prepare_ai_prompt(self):
         report = "Проанализируй результаты теста и дай краткие рекомендации:\n"
 
@@ -510,6 +633,43 @@ class MyWidget(QtWidgets.QWidget): #окно
 #я продолжу походу переодически создавать новые окна АААА
 
 
+
+        #self.layout.setContentsMargins(0, 200, 0, 0) #отступ для лэйаута
+        #self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)  #ыравнивание по центру
+
+        #таймер (нужен для строки прогресса)
+        #self.decrease_timer = QtCore.QTimer(self)
+
+        #строка прогресса
+        #self.prog_bar = QtWidgets.QProgressBar(self)
+        #self.prog_bar.hide()
+        #может реализую позже
+
+        #текст (заголовок)
+
+
+
+
+
+        #модуль с рекомендациями
+        #инициализируется здесь для передачи в другю функцию
+
+
+        #прогресс вопросов
+        '''
+        ДОБАВИТЬ НА 2 СТРАНИЦУ
+        self.recs_box = QtWidgets.QTextEdit("Анализирую результаты, подождите...", self)
+        self.recs_box.hide()
+        pr_box = QtWidgets.QTextEdit("", self)
+        pr_box.move(0, 750)
+        pr_box.resize(500, 50)
+        pr_box.setStyleSheet("background: transparent; border: none; color: white;")
+        pr_box.setFont(QtGui.QFont("Sylfaen", 14))
+        pr_box.setReadOnly(True)
+        self.prog_box = pr_box
+        self.prog_box.hide()
+        #результаты одного (!) теста
+        '''
 
 
 
