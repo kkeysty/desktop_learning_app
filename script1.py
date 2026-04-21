@@ -2,13 +2,10 @@ import os
 os.environ["PYTHONIOENCODING"] = "utf-8"
 import sys
 from dotenv import load_dotenv
-import time
-import openai
+
 from functools import partial
 from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import QPoint
-from PySide6.QtCore import QDir
-import csv
+
 load_dotenv()
 import re
 from openai import OpenAI
@@ -157,7 +154,7 @@ class MyWidget(QtWidgets.QWidget): #окно
         button1.setFixedSize(400, 50)
         button2.setFixedSize(400, 50)
 
-        button1.clicked.connect(self.check_action)
+        button1.clicked.connect(self.downld_action)
         button2.clicked.connect(self.tests_menu)
 
         button_layout.addWidget(button1)
@@ -592,6 +589,15 @@ class MyWidget(QtWidgets.QWidget): #окно
         print(f"Ошибка AI: {error_message}")
 
 
+
+    @QtCore.Slot()
+    #действие "скачать"
+    def downld_action(self):
+        # Создаем и открываем модальное окно
+        self.menu = DownloadMenu("project.db")
+        self.menu.exec()
+
+
 ### ДАЛЬШЕ ТОКА МУСОР !!!
 
 
@@ -616,153 +622,6 @@ class MyWidget(QtWidgets.QWidget): #окно
 
 
 
-
-
-    @QtCore.Slot()
-    #действие "проверить", пока тут просто стоит заглушка
-    def check_action(self):
-        # Создаем и открываем модальное окно
-        self.menu = DownloadMenu("project.db")
-        self.menu.exec()
-
-    #действие "не проверять", но не конечное
-
-
-
-
-    #функция, не несущая большого смысла, просто для удобства чтения кода
-    #прячет текст
-    def hide_my_message(self):
-        if self.k >= 1:
-            self.question.hide()
-        else: return
-
-    #функция для изменения размера кнопки
-    def change_size(self):
-        self.button2.setFixedSize( 400+50*(12-self.k), 50)
-        self.button2.setFont(QtGui.QFont("Bookman Old Style", 14 + (12-self.k)))
-        self.button2.move(550 - 25*(12-self.k), 700)
-
-    #если игрок ОЧЕНЬ настойчиво выбирал "не проверять"
-    #почти новая страница, 1.1
-    def jump_to_dont(self):
-        #пряяем кнопки
-        self.button2.hide()
-        self.button1.hide()
-
-        #меняем фон на белый
-        self.background_label.setPixmap(QtGui.QPixmap("white_canvas.png"))
-
-        #таймер для первой задержки (2 секунды)
-        QtCore.QTimer.singleShot(2000, lambda: self.change_to_black())
-
-    def change_to_black(self):
-        #меняем фон на чёрный
-        self.background_label.setPixmap(QtGui.QPixmap('black_canvas.png'))
-
-        #таймер для второй задержки (2 секунды)
-        QtCore.QTimer.singleShot(2000, lambda: self.change_back())
-
-    def change_back(self):
-        #меняем фон опять (снова) - страница 1.1
-        self.background_label.setPixmap(QtGui.QPixmap('pygame_holding_door.png'))
-        #вот тут как бэ ошибочка потому что наверно стоило старую кнопку использовать
-        #но пока оставим так
-        #расписываем как выглядит кнопка
-        push_button_font = QtGui.QFont("Courier", 20)
-        self.button_push.setFont(push_button_font)
-        self.button_push.hide()
-        self.button_push.move(50,500)
-        self.button_push.setFixedSize(200,50)
-        self.button_push.setStyleSheet("background-color: #5c6671;border: 2px solid black;")
-        self.button_push.show()
-        self.k = 0
-        #коннектим с пушинг дор
-        self.button_push.clicked.connect(self.pushing_door)
-
-
-    #функция для открытия двери
-    #в основном просто показывает и меняет текст
-    #потом переходит в мини-игру открыть дверь
-    def pushing_door(self):
-        #текст для высвечивания на экране
-        push_mono = ["I should leave, then...", "I just... have to open the door.", "Am I sure?",
-                     "Isn't it better if I check..."]
-        #настройка внешнего вида сообщения
-        self.question = QtWidgets.QTextEdit("",self)
-        self.question.setFont(QtGui.QFont("Sylfaen", 18, italic=True))
-        self.question.setFixedSize(400, 50)
-        self.question.setStyleSheet("background-color: #2c3742")
-        self.question.move(450, 50)
-        self.question.show()
-
-        #настройка прогресс бара
-        self.prog_bar.setRange(0,500)
-        self.prog_bar.move(425, 200)
-        self.prog_bar.setFixedWidth(450)
-        self.prog_bar.setStyleSheet("""
-            QProgressBar {
-                height: 15px;
-                border-style: solid;
-                border-width: 2px;
-                border-color: black;
-                background-color: #FFFFFF;  /* Background color of the progress bar */
-            }
-            QProgressBar::chunk {
-                background-color: #FFD580;  /* Color of the progress chunks */
-                width: 7px;                 /* Width of each chunk */
-            }
-        """)
-        self.prog_bar.setTextVisible(False)
-
-        if self.k < 4:
-            #от 0 до 3 меняем текст
-            #я уверена что это можно оптимизировать но мне лень думать как
-            #погнали перегрузку компа
-            self.question.setPlainText(push_mono[self.k])
-            self.k += 1
-        else:
-            self.question.hide()#прячем сообщение
-            self.background_label.setPixmap(QtGui.QPixmap('pygame_holding_theDOOR.png')) #меняем бэкграунд
-            self.button_push.clicked.connect(self.opening_door)#коннектим button_push с новой функцией
-            #старая (вроде) не выполняется, k = 0
-
-            self.button_push.setText("PUSH.")
-            self.prog_bar.show() #показываем прогресс бар
-
-            #таймер, который срабатывает каждые 150 мс. Каждый раз уменьшает значение progress_bar
-            #подробнее про значения прогресс бар в следующей функции
-            #таймер запускается только после нажатия на кнопку 5 раз
-            self.decrease_timer.timeout.connect(self.decrease)
-            self.decrease_timer.start(150)  # Вызывается каждые 150 мс
-
-    #та самая мини-игра "открыть дверь"
-    def opening_door(self):
-        cur_val = self.prog_bar.value()
-        #запоминаем текущее значение прогресс бара
-        self.prog_bar.setValue(cur_val + 4)
-        #увеличиваем значение ПБ на 4, так как кнопка была нажата
-        #при значении больше 490 переходим наконец в не-проверять концовку
-        #и останавливаем таймер
-        if self.prog_bar.value() >= 490: #то есть если ПБ (почти) заполнена
-            self.decrease_timer.stop()
-            self.dont_check_ending()
-
-
-    #концовка не-проверять. пока что стоит заглушка
-    def dont_check_ending(self):
-        self.clear_window()
-        self.background_label.setPixmap(QtGui.QPixmap('black_canvas.png'))
-
-    #уменьшение значения ПБ
-    def decrease(self):
-        cur_val = self.prog_bar.value()
-        if cur_val > 0:
-            self.prog_bar.setValue(cur_val - 1)
-        #если значение ПБ опустилось до нуля
-        if self.prog_bar.value() == 0:
-            self.decrease_timer.stop() #становка таймера
-            self.check_action() #проверить-концовка
 
     #ХААААХ я реально только так придумала
     def clear_window(self):
