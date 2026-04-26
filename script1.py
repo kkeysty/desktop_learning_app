@@ -60,7 +60,7 @@ class MyWidget(QtWidgets.QWidget): #окно
     def __init__(self):
         super().__init__()
         self.resize(1000, 800)
-        self.setFixedSize(1000, 800)
+        #self.setFixedSize(1000, 800)
 
         # 1. Создаем StackedWidget
         self.stacked_widget = QtWidgets.QStackedWidget(self)
@@ -116,6 +116,12 @@ class MyWidget(QtWidgets.QWidget): #окно
 
     def setup_main_page(self):
         #layout = QtWidgets.QVBoxLayout(self.page_main)
+        # Переключаемся на главную страницу
+        self.stacked_widget.setCurrentIndex(0)
+
+        # Очищаем предыдущие результаты теста
+        self.user_progress_right = []
+        self.user_progress_wrong = []
 
         self.stacked_widget.setCurrentIndex(0)
 
@@ -141,25 +147,38 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         button1 = QtWidgets.QPushButton("Скачать дополнительные материалы", self)
         button2 = QtWidgets.QPushButton("Начать тест", self)
+        button3 = QtWidgets.QPushButton("Добавить вопрос", self)
 
         font = QtGui.QFont()
         font.setFamily("Bookman Old Style")  # Название шрифта
         font.setPointSize(14)  # Размер шрифта
         button1.setFont(font)
         button2.setFont(font)
+        button3.setFont(font)
         button1.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
         button2.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
-        button1.move(50, 700)
-        button2.move(550, 700)
-        button1.setFixedSize(400, 50)
-        button2.setFixedSize(400, 50)
+        button3.setStyleSheet("background-color: #5c6671; color: white; border: 2px solid black;")
+        #button1.move(50, 700)
+        #button2.move(550, 700)
+        #button1.setFixedSize(400, 50)
+        #button2.setFixedSize(400, 50)
+
+        button1.setMinimumHeight(50)
+        button1.setMinimumWidth(400)
+        button2.setMinimumHeight(50)
+        button2.setMinimumWidth(200)
+        button3.setMinimumHeight(50)
+        button3.setMinimumWidth(200)
 
         button1.clicked.connect(self.downld_action)
         button2.clicked.connect(self.tests_menu)
+        button3.clicked.connect(self.open_add_question_dialog)
 
         button_layout.addWidget(button1)
-        button_layout.addSpacing(50)  # Расстояние между кнопками
+        button_layout.addStretch()  # Расстояние между кнопками
         button_layout.addWidget(button2)
+        button_layout.addStretch()
+        button_layout.addWidget(button3)
 
         # Добавляем слой с кнопками в основной слой
         main_layout.addLayout(button_layout)
@@ -274,6 +293,13 @@ class MyWidget(QtWidgets.QWidget): #окно
 
 #функция начала теста
     def start_combined_test(self, paths):
+        # Очищаем предыдущие результаты
+        self.user_progress_right = []
+        self.user_progress_wrong = []
+
+        self.all_questions = {}
+        current_global_id = 0
+
         self.all_questions = {}
         current_global_id = 0  # Общий счетчик, чтобы ID не дублировались
 
@@ -474,61 +500,69 @@ class MyWidget(QtWidgets.QWidget): #окно
         main_layout.addWidget(prog_box)
 
     def check_answer(self, que, n):
-        tr_an = str(que["true_answer"])
-        if ( que["answers"].split("|") )[n] == tr_an:
+        tr_an = str(que["true_answer"]).strip()
+        user_answer = que["answers"].split("|")[n].strip()
+
+        # Отладка
+        print(f"Правильный ответ: '{tr_an}'")
+        print(f"Ответ пользователя: '{user_answer}'")
+        print(f"Совпадают: {user_answer == tr_an}")
+
+        if user_answer == tr_an:
             self.user_progress_right.append(self.question_ids[self.current_index])
         else:
             self.user_progress_wrong.append(self.question_ids[self.current_index])
 
         self.current_index += 1
         self.displayQA()
-        #(self.user_progress_right)
-        return
 
     def end_of_the_test(self):
-
         # Проверяем, что thread существует, это именно объект QThread, и он запущен
         if hasattr(self, 'thread') and isinstance(self.thread, QtCore.QThread):
             if self.thread.isRunning():
                 self.thread.quit()
                 self.thread.wait()
 
-        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
-            # 2. Правильная очистка страницы результатов
-        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
-        if self.page_test.layout() is not None:
-            old_layout = self.page_test.layout()
-
-            # Удаляем все виджеты
+        # Очищаем страницу результатов, а не страницу теста!
+        if self.page_results.layout() is not None:
+            old_layout = self.page_results.layout()
             while old_layout.count():
                 item = old_layout.takeAt(0)
                 widget = item.widget()
                 if widget:
                     widget.deleteLater()
                 elif item.layout():
-                    self.clear_layout(item.layout())  # Вызываем ваш вспомогательный метод
-
-            # Вместо shiboken.delete мы "переносим" лайаут на временный объект,
-            # который тут же уничтожится, забирая лайаут с собой.
+                    self.clear_layout(item.layout())
             QtWidgets.QWidget().setLayout(old_layout)
 
         self.stacked_widget.setCurrentIndex(3)
         self.page_results.setStyleSheet("background-color: #7393b3;")
 
         main_layout = QtWidgets.QVBoxLayout(self.page_results)
-        pr_text = f"Результат: {(len(self.user_progress_right) / len(self.question_ids)) * 100}% правильных ответов"
+
+        # Подсчет процента
+        if len(self.question_ids) > 0:
+            percentage = (len(self.user_progress_right) / len(self.question_ids)) * 100
+        else:
+            percentage = 0
+
+        pr_text = f"Результат: {percentage:.1f}% правильных ответов.\n"
+        pr_text += f"Правильно: {len(self.user_progress_right)} из {len(self.question_ids)}"
+
         res_box = QtWidgets.QTextEdit(pr_text)
         res_box.setFixedHeight(150)
         res_box.setFont(QtGui.QFont("Sylfaen", 34))
-        res_box.move(50, 100)
+        res_box.setStyleSheet("background-color: rgba(255, 0, 0, 0); border: none; color: #F0F8FF;")
+        res_box.setReadOnly(True)
+        res_box.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(res_box)
 
         self.recs_box = QtWidgets.QTextEdit("Обработка результатов, подождите...")
-        self.recs_box.setFixedHeight(500)  # Это ограничит его рост вверх
+        self.recs_box.setFixedHeight(500)
         self.recs_box.setFont(QtGui.QFont("Sylfaen", 22))
         self.recs_box.setReadOnly(True)
         self.recs_box.setStyleSheet(
-                "background: rgba(255, 255, 255, 30); border-radius: 10px; color: white; padding: 10px;")
+            "background: rgba(255, 255, 255, 30); border-radius: 10px; color: white; padding: 10px;")
         main_layout.addWidget(self.recs_box)
 
         # кнопка возвращения на главный экран
@@ -540,31 +574,27 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         main_layout.setContentsMargins(30, 30, 30, 30)
 
-        self.page_results.update()  # Перерисовать виджет
-        self.page_results.repaint()  # Немедленно обновить (форсированно)
-        QtWidgets.QApplication.processEvents()  # Обработать все скопившиеся события отрисовки
+        self.page_results.update()
+        self.page_results.repaint()
+        QtWidgets.QApplication.processEvents()
 
+        test_summary = self.prepare_ai_prompt()
 
-        test_summary = self.prepare_ai_prompt()  # Собираем текст для API
-
-            # запускаем, чтобы во время ожидания API ответа программа не замораживалась
+        # запускаем поток для AI
         self.thread = QtCore.QThread()
-
         self.worker = AIWorker(test_summary, os.getenv('OPENROUTER_API_KEY'))
         self.worker.moveToThread(self.thread)
 
-            # Соединяем сигналы
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.on_ai_finished)
         self.worker.error.connect(self.on_ai_error)
 
-            # Очистка памяти после завершения
+        # Правильное завершение потока
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
         self.thread.start()
-
 
 
     def prepare_ai_prompt(self):
@@ -589,6 +619,11 @@ class MyWidget(QtWidgets.QWidget): #окно
         print(f"Ошибка AI: {error_message}")
 
 
+
+    @QtCore.Slot()
+    def open_add_question_dialog(self):
+        dialog = AddQuestionDialog(self)
+        dialog.exec()
 
     @QtCore.Slot()
     #действие "скачать"
@@ -800,6 +835,325 @@ class DownloadMenu(QDialog):
 
 
 
+
+
+class AddQuestionDialog(QDialog):
+    """
+    Диалог добавления нового вопроса в локальную базу данных.
+
+    Структура downloads/:
+        downloads/
+          <Предмет>/
+            <Раздел>/
+              <Тема>/
+                <тема>.db  (таблица local_questions: text, options, answer)
+
+    Пользователь может:
+      • Выбрать существующую тему из дерева папок downloads
+      • Или ввести вручную Предмет / Раздел / Тему (создадутся автоматически)
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Добавить вопрос")
+        self.resize(600, 700)
+        self.setStyleSheet("background-color: #2b2b2b; color: #f0f8ff;")
+        self.answer_radios = []
+        self.answers_group = QtWidgets.QButtonGroup(self)
+        self.answers_group.setExclusive(True)
+        self._build_ui()
+
+    # ------------------------------------------------------------------ #
+    #  UI
+    # ------------------------------------------------------------------ #
+    def _build_ui(self):
+        root = QtWidgets.QVBoxLayout(self)
+        root.setSpacing(10)
+        root.setContentsMargins(20, 20, 20, 20)
+
+        label_style = "font-size: 13px; font-weight: bold; color: #cce0ff;"
+        input_style = (
+            "background-color: #3c3f41; color: white; "
+            "border: 1px solid #555; border-radius: 4px; padding: 4px;"
+        )
+        btn_style = (
+            "background-color: #5c6671; color: white; "
+            "border: 2px solid #888; border-radius: 4px; padding: 6px;"
+        )
+
+        # --- Выбор темы из дерева ---
+        root.addWidget(self._lbl("📂  Выберите тему из скачанных материалов:", label_style))
+
+        self.tree = QtWidgets.QTreeWidget()
+        self.tree.setHeaderLabel("downloads/")
+        self.tree.setFixedHeight(180)
+        self.tree.setStyleSheet(
+            "QTreeWidget { background: #1e1e1e; color: white; border: 1px solid #555; }"
+            "QTreeWidget::item:selected { background: #3a5f8a; }"
+        )
+        self._populate_tree()
+        self.tree.itemClicked.connect(self._on_tree_select)
+        root.addWidget(self.tree)
+
+        # --- Разделитель ---
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        line.setStyleSheet("color: #555;")
+        root.addWidget(line)
+
+        root.addWidget(self._lbl("✏️  Или укажите путь вручную:", label_style))
+
+        grid = QtWidgets.QGridLayout()
+        grid.setSpacing(6)
+
+        self.le_subject = QtWidgets.QLineEdit()
+        self.le_subject.setPlaceholderText("Предмет (папка 1-го уровня)")
+        self.le_subject.setStyleSheet(input_style)
+
+        self.le_section = QtWidgets.QLineEdit()
+        self.le_section.setPlaceholderText("Раздел (папка 2-го уровня)")
+        self.le_section.setStyleSheet(input_style)
+
+        self.le_topic = QtWidgets.QLineEdit()
+        self.le_topic.setPlaceholderText("Тема (папка 3-го уровня / имя .db)")
+        self.le_topic.setStyleSheet(input_style)
+
+        grid.addWidget(self._lbl("Предмет:", label_style), 0, 0)
+        grid.addWidget(self.le_subject, 0, 1)
+        grid.addWidget(self._lbl("Раздел:", label_style), 1, 0)
+        grid.addWidget(self.le_section, 1, 1)
+        grid.addWidget(self._lbl("Тема:", label_style), 2, 0)
+        grid.addWidget(self.le_topic, 2, 1)
+        root.addLayout(grid)
+
+        # --- Вопрос ---
+        line2 = QtWidgets.QFrame()
+        line2.setFrameShape(QtWidgets.QFrame.HLine)
+        line2.setStyleSheet("color: #555;")
+        root.addWidget(line2)
+
+        root.addWidget(self._lbl("❓  Текст вопроса:", label_style))
+        self.te_question = QtWidgets.QTextEdit()
+        self.te_question.setFixedHeight(70)
+        self.te_question.setStyleSheet(input_style)
+        self.te_question.setPlaceholderText("Введите вопрос...")
+        root.addWidget(self.te_question)
+
+        # --- Варианты ответов ---
+        root.addWidget(self._lbl("🔘  Варианты ответов (минимум 2):", label_style))
+
+        self.answer_edits = []
+        self.answer_radios = []
+        self.answers_group = QtWidgets.QButtonGroup(self)
+
+        self.answers_container = QtWidgets.QVBoxLayout()
+        for i in range(4):
+            row, le, rb = self._make_answer_row(i, input_style)
+            self.answers_container.addLayout(row)
+            self.answer_edits.append(le)
+            self.answer_radios.append(rb)
+            self.answers_group.addButton(rb, i)
+
+        root.addLayout(self.answers_container)
+
+        # --- Кнопки ---
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_save = QtWidgets.QPushButton("💾  Сохранить вопрос")
+        btn_save.setStyleSheet(btn_style)
+        btn_save.setFixedHeight(40)
+        btn_save.clicked.connect(self._save_question)
+
+        btn_cancel = QtWidgets.QPushButton("Отмена")
+        btn_cancel.setStyleSheet(btn_style)
+        btn_cancel.setFixedHeight(40)
+        btn_cancel.clicked.connect(self.reject)
+
+        btn_row.addWidget(btn_save)
+        btn_row.addWidget(btn_cancel)
+        root.addLayout(btn_row)
+
+        # Статус
+        self.lbl_status = QtWidgets.QLabel("")
+        self.lbl_status.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.lbl_status.setStyleSheet("font-size: 12px;")
+        root.addWidget(self.lbl_status)
+
+    # ------------------------------------------------------------------ #
+    #  Helpers
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _lbl(text, style=""):
+        lbl = QtWidgets.QLabel(text)
+        if style:
+            lbl.setStyleSheet(style)
+        return lbl
+
+    def _make_answer_row(self, idx, input_style):
+        row = QtWidgets.QHBoxLayout()
+        rb = QtWidgets.QCheckBox(f"Правильный ответ {idx + 1}")
+        rb.setStyleSheet("""
+            QCheckBox {
+                color: #aaffaa;
+                font-size: 14px;
+                font-weight: bold;
+                spacing: 8px;
+                padding: 5px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #aaffaa;
+                border-radius: 4px;
+                background-color: #2b2b2b;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #aaffaa;
+                border: 2px solid #00cc00;
+            }
+            QCheckBox::indicator:hover {
+                border: 2px solid #aaffaa;
+                background-color: #3a5f3a;
+            }
+        """)
+        le = QtWidgets.QLineEdit()
+        le.setPlaceholderText(f"Ответ {idx + 1}")
+        le.setStyleSheet(input_style)
+        row.addWidget(rb)
+        row.addWidget(le)
+        return row, le, rb
+
+    # ------------------------------------------------------------------ #
+    #  Дерево downloads
+    # ------------------------------------------------------------------ #
+    def _populate_tree(self):
+        base = "./downloads"
+        self.tree.clear()
+        if not os.path.exists(base):
+            self.tree.setHeaderLabel("Папка downloads не найдена")
+            return
+        self._fill_tree_node(base, self.tree.invisibleRootItem(), depth=0)
+
+    def _fill_tree_node(self, path, parent, depth):
+        """Рекурсивно строит дерево до 3-го уровня (тема)."""
+        if depth > 2:
+            return
+        for name in sorted(os.listdir(path)):
+            full = os.path.join(path, name)
+            if os.path.isdir(full):
+                item = QtWidgets.QTreeWidgetItem(parent, [name])
+                item.setData(0, QtCore.Qt.UserRole, full)
+                self._fill_tree_node(full, item, depth + 1)
+
+    def _on_tree_select(self, item, _col):
+        """Заполняет текстовые поля при выборе элемента в дереве."""
+        path = item.data(0, QtCore.Qt.UserRole)
+        if not path:
+            return
+        # Разбиваем путь относительно downloads/
+        rel = os.path.relpath(path, "./downloads")
+        parts = rel.replace("\\", "/").split("/")
+        fields = [self.le_subject, self.le_section, self.le_topic]
+        for i, field in enumerate(fields):
+            field.setText(parts[i] if i < len(parts) else "")
+
+    # ------------------------------------------------------------------ #
+    #  Сохранение
+    # ------------------------------------------------------------------ #
+    def _save_question(self):
+        # 1. Путь
+        subject = self.le_subject.text().strip()
+        section = self.le_section.text().strip()
+        topic = self.le_topic.text().strip()
+
+        if not subject or not section or not topic:
+            self._status("⚠️ Укажите Предмет, Раздел и Тему.", "#ffaa44")
+            return
+
+        # 2. Текст вопроса
+        question_text = self.te_question.toPlainText().strip()
+        if not question_text:
+            self._status("⚠️ Введите текст вопроса.", "#ffaa44")
+            return
+
+        # 3. Ответы
+        answers = [le.text().strip() for le in self.answer_edits]
+        filled = [a for a in answers if a]
+        if len(filled) < 2:
+            self._status("⚠️ Введите минимум 2 варианта ответа.", "#ffaa44")
+            return
+
+        correct_idx = self.answers_group.checkedId()
+        if correct_idx == -1:
+            self._status("⚠️ Отметьте правильный ответ.", "#ffaa44")
+            return
+
+        correct_answer = answers[correct_idx]
+        if not correct_answer:
+            self._status("⚠️ Правильный ответ не может быть пустым — заполните его текст.", "#ffaa44")
+            return
+        if correct_answer not in filled:
+            self._status("⚠️ Правильный ответ должен быть среди заполненных вариантов.", "#ffaa44")
+            return
+
+        options_str = "|".join(filled)  # Формат: "А|Б|В|Г"
+
+        # 4. Создаём папки
+        # Очищаем имена от запрещённых символов (как в DownloadMenu)
+        def sanitize(name):
+            return re.sub(r'[\\/*?:"<>|]', "", name)
+
+        safe_subject = sanitize(subject)
+        safe_section = sanitize(section)
+        safe_topic = sanitize(topic)
+
+        topic_dir = os.path.join("downloads", safe_subject, safe_section, safe_topic)
+        os.makedirs(topic_dir, exist_ok=True)
+
+        # 5. Открываем / создаём .db файл
+        db_name = safe_topic + ".db"
+        db_path = os.path.join(topic_dir, db_name)
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # Создаём таблицу, если её ещё нет (совместима с start_combined_test)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS local_questions (
+                    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text    TEXT    NOT NULL,
+                    options TEXT    NOT NULL,
+                    answer  TEXT    NOT NULL
+                )
+            """)
+
+            cursor.execute(
+                "INSERT INTO local_questions (text, options, answer) VALUES (?, ?, ?)",
+                (question_text, options_str, correct_answer)
+            )
+            conn.commit()
+            conn.close()
+
+            self._status(f"✅ Вопрос сохранён в {db_path}", "#aaffaa")
+            self._clear_form()
+
+        except Exception as e:
+            self._status(f"❌ Ошибка: {e}", "#ff6666")
+
+    def _status(self, text, color="#ffffff"):
+        self.lbl_status.setText(text)
+        self.lbl_status.setStyleSheet(f"font-size: 12px; color: {color};")
+
+    def _clear_form(self):
+        self.te_question.clear()
+        for le in self.answer_edits:
+            le.clear()
+        self.answers_group.setExclusive(False)
+        for rb in self.answer_radios:
+            rb.setChecked(False)
+        self.answers_group.setExclusive(True)
+        # Обновляем дерево (вдруг создали новую тему)
+        self._populate_tree()
 
 
 if __name__ == "__main__":
