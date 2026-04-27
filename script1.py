@@ -251,19 +251,24 @@ class MyWidget(QtWidgets.QWidget): #окно
         main_layout.addWidget(self.btn_start)
 
     def populate_tree(self, path, parent_item):
-        """Рекурсивно заполняет дерево папками из downloads"""
+        """Рекурсивно заполняет дерево папками из downloads с авто-состоянием галочек"""
         for name in os.listdir(path):
             full_path = os.path.join(path, name)
+
             if os.path.isdir(full_path):
                 item = QtWidgets.QTreeWidgetItem(parent_item, [name])
 
-                # --- УСТАНОВКА ГАЛОЧЕК ---
-                # Добавляем флаг возможности выбора
-                item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                # Добавляем флаги:
+                # ItemIsUserCheckable — можно кликать
+                # ItemIsAutoTristate — родитель реагирует на детей, а дети на родителя
+                item.setFlags(item.flags() |
+                              QtCore.Qt.ItemFlag.ItemIsUserCheckable |
+                              QtCore.Qt.ItemFlag.ItemIsAutoTristate)
+
                 # По умолчанию галочка не стоит
                 item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
-
                 item.setData(0, QtCore.Qt.UserRole, full_path)
+
                 # Рекурсия для вложенных папок
                 self.populate_tree(full_path, item)
 
