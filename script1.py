@@ -56,6 +56,105 @@ class AIWorker(QtCore.QObject):
             self.error.emit(str(e)) # Отправляем ошибку
 
 
+
+class PasswordDialog(QDialog):
+    """Диалог запроса пароля для доступа к добавлению вопросов"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Требуется авторизация")
+        self.setFixedSize(400, 200)
+        self.setStyleSheet("background-color: #2b2b2b; color: #f0f8ff;")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Заголовок
+        title = QtWidgets.QLabel("🔒 Доступ только для администраторов")
+        title.setFont(QtGui.QFont("Sylfaen", 14, QtGui.QFont.Bold))
+        title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        title.setStyleSheet("color: #ffaa44; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        # Поле для пароля
+        self.password_input = QtWidgets.QLineEdit()
+        self.password_input.setPlaceholderText("Введите пароль")
+        self.password_input.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.password_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3f41;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 4px;
+                padding: 8px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #ffaa44;
+            }
+        """)
+        layout.addWidget(self.password_input)
+
+        # Кнопки
+        btn_layout = QtWidgets.QHBoxLayout()
+
+        self.btn_ok = QtWidgets.QPushButton("Войти")
+        self.btn_ok.setStyleSheet("""
+            QPushButton {
+                background-color: #5c6671;
+                color: white;
+                border: 1px solid #888;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #6c7785;
+            }
+        """)
+        self.btn_ok.clicked.connect(self.check_password)
+
+        self.btn_cancel = QtWidgets.QPushButton("Отмена")
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #4a3a3a;
+                color: white;
+                border: 1px solid #888;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #5a4a4a;
+            }
+        """)
+        self.btn_cancel.clicked.connect(self.reject)
+
+        btn_layout.addWidget(self.btn_ok)
+        btn_layout.addWidget(self.btn_cancel)
+        layout.addLayout(btn_layout)
+
+        # Сообщение об ошибке
+        self.error_label = QtWidgets.QLabel("")
+        self.error_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.error_label.setStyleSheet("color: #ff6666; font-size: 11px;")
+        layout.addWidget(self.error_label)
+
+        self.password_input.setFocus()
+        self.password_input.returnPressed.connect(self.check_password)
+
+    def check_password(self):
+        """Проверка введённого пароля"""
+        correct_password = "пароль"  # Пароль для доступа к добавлению вопросов
+
+        if self.password_input.text() == correct_password:
+            self.accept()
+        else:
+            self.error_label.setText("❌ Неверный пароль")
+            self.password_input.clear()
+            self.password_input.setFocus()
+
 class MyWidget(QtWidgets.QWidget): #окно
     def __init__(self):
         super().__init__()
@@ -200,40 +299,65 @@ class MyWidget(QtWidgets.QWidget): #окно
 
         main_layout = QtWidgets.QVBoxLayout(self.page_dirs)
 
+        # --- ВЕРХНЯЯ ПАНЕЛЬ С КНОПКОЙ ВЫХОДА ---
+        top_bar = QtWidgets.QHBoxLayout()
+
+        exit_button = QtWidgets.QPushButton("🏠 Выйти в главное меню")
+        exit_button.setFont(QtGui.QFont("Sylfaen", 12))
+        exit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #8B0000;
+                color: white;
+                border: 1px solid #660000;
+                border-radius: 5px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #B22222;
+            }
+        """)
+        exit_button.setFixedWidth(250)
+        exit_button.clicked.connect(self.exit_to_main_menu)
+
+        top_bar.addStretch()
+        top_bar.addWidget(exit_button)
+        main_layout.addLayout(top_bar)
+
+        # Заголовок
         title = QtWidgets.QLabel("Выберите тему для тестирования:")
         title.setFont(QtGui.QFont("Sylfaen", 28, italic=True))
         title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        title.setStyleSheet("color: #F0F8FF; margin-top: 20px;")
+        title.setStyleSheet("color: #F0F8FF; margin-top: 10px;")
         main_layout.addWidget(title)
 
         # Используем QTreeWidget для отображения иерархии папок
         self.test_tree = QtWidgets.QTreeWidget()
         self.test_tree.setHeaderLabel("Скачанные материалы")
         self.test_tree.setStyleSheet("""
-        QTreeWidget {
-            background-color: #121212;
-            color: #FFFFFF;
-            border: 1px solid #444;
-            font-size: 14px;
-        }
-        QTreeWidget::item {
-            padding: 5px;
-            border-bottom: 1px solid #222;
-        }
-        QTreeWidget::item:selected {
-            background-color: #333333;
-        }
-        QHeaderView::section {
-            background-color: #1f1f1f;
-            color: white;
-            padding: 4px;
-            border: 1px solid #444;
-        }
-        QTreeWidget::indicator {
-            width: 18px;
-            height: 18px;
-        }
-    """)
+            QTreeWidget {
+                background-color: #121212;
+                color: #FFFFFF;
+                border: 1px solid #444;
+                font-size: 14px;
+            }
+            QTreeWidget::item {
+                padding: 5px;
+                border-bottom: 1px solid #222;
+            }
+            QTreeWidget::item:selected {
+                background-color: #333333;
+            }
+            QHeaderView::section {
+                background-color: #1f1f1f;
+                color: white;
+                padding: 4px;
+                border: 1px solid #444;
+            }
+            QTreeWidget::indicator {
+                width: 18px;
+                height: 18px;
+            }
+        """)
         main_layout.addWidget(self.test_tree)
 
         # Путь к скачанным файлам
@@ -247,6 +371,17 @@ class MyWidget(QtWidgets.QWidget): #окно
         self.btn_start = QtWidgets.QPushButton("Начать тест по выбранной теме")
         self.btn_start.setFixedHeight(50)
         self.btn_start.setFont(QtGui.QFont("Sylfaen", 14, QtGui.QFont.Bold))
+        self.btn_start.setStyleSheet("""
+            QPushButton {
+                background-color: #2E7D32;
+                color: white;
+                border: 1px solid #1B5E20;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+        """)
         self.btn_start.clicked.connect(self.prepare_test_launch)
         main_layout.addWidget(self.btn_start)
 
@@ -352,157 +487,132 @@ class MyWidget(QtWidgets.QWidget): #окно
             print("Вопросы не найдены в выбранных материалах.")
 
     def displayQA(self):
-
         self.stacked_widget.setCurrentIndex(2)
-        # --- ПОЛНАЯ ОЧИСТКА ---
-        # --- ОЧИСТКА ДЛЯ PYSIDE6 ---
 
-        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
+        # --- ПОЛНАЯ ОЧИСТКА ---
         if self.page_test.layout() is not None:
             old_layout = self.page_test.layout()
 
-            # Удаляем все виджеты
             while old_layout.count():
                 item = old_layout.takeAt(0)
                 widget = item.widget()
                 if widget:
                     widget.deleteLater()
                 elif item.layout():
-                    self.clear_layout(item.layout())  # Вызываем ваш вспомогательный метод
+                    self.clear_layout(item.layout())
 
-            # Вместо shiboken.delete мы "переносим" лайаут на временный объект,
-            # который тут же уничтожится, забирая лайаут с собой.
             QtWidgets.QWidget().setLayout(old_layout)
 
         self.page_test.setStyleSheet("background-color: #7393b3;")
         main_layout = QtWidgets.QVBoxLayout(self.page_test)
+        main_layout.setContentsMargins(10, 10, 10, 10)  # Отступы от краёв
 
         # Проверка: остались ли еще вопросы?
         if self.current_index >= len(self.question_ids):
             self.end_of_the_test()
             return
 
-        # 2. Получаем текущий вопрос
+        # Получаем текущий вопрос
         current_id = self.question_ids[self.current_index]
         q_data = self.all_questions[str(current_id)]
 
-        # 3. Отрисовка вопроса
+        # --- ВЕРХНЯЯ ПАНЕЛЬ ---
+        # Создаём горизонтальный layout для верхней панели
+        top_widget = QtWidgets.QWidget()
+        top_layout = QtWidgets.QHBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Добавляем растяжку слева, чтобы кнопка была справа
+        top_layout.addStretch()
+
+        # Кнопка выхода
+        exit_button = QtWidgets.QPushButton("🏠 Выйти в главное меню")
+        exit_button.setFont(QtGui.QFont("Sylfaen", 12))
+        exit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #8B0000;
+                color: white;
+                border: 1px solid #660000;
+                border-radius: 5px;
+                padding: 8px 15px;
+            }
+            QPushButton:hover {
+                background-color: #B22222;
+            }
+        """)
+        exit_button.setFixedWidth(250)
+        exit_button.clicked.connect(self.exit_to_main_menu)
+        top_layout.addWidget(exit_button)
+
+        # Добавляем верхнюю панель в основной layout
+        main_layout.addWidget(top_widget)
+
+        # Центральный виджет с вопросом и ответами
+        center_widget = QtWidgets.QWidget()
+        center_layout = QtWidgets.QVBoxLayout(center_widget)
+        center_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        # Вопрос
         question = QtWidgets.QTextEdit(q_data["text"].strip('"'))
         question.setFont(QtGui.QFont("Sylfaen", 32, italic=True))
         question.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         question.setTextColor("#F0F8FF")
-        question.setStyleSheet( "background-color: rgba(255, 0, 0, 0); border:  none");  # последний параметр rgba - прозрачность
-        question.setReadOnly(True)  # Запрет на изменение текста
-        question.setFixedHeight(250)  # размеры
-        main_layout.addWidget(question)
-        main_layout.setContentsMargins(0, 50, 0, 0)
+        question.setStyleSheet("background-color: rgba(255, 0, 0, 0); border: none;")
+        question.setReadOnly(True)
+        question.setFixedHeight(250)
+        center_layout.addWidget(question)
 
-        # 4. Отрисовка кнопок ответов
+        # Кнопки ответов
         answers_list = q_data["answers"].split("|")
-        width, height = 1000, 800
-        work_height = height - 350
 
         button_layout = QtWidgets.QVBoxLayout()
+        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        button_layout.setSpacing(15)
 
         for i in range(len(answers_list)):
-            button = QtWidgets.QPushButton(answers_list[i], self)
-            button.setFixedWidth(500)
+            button = QtWidgets.QPushButton(answers_list[i])
+            button.setFixedWidth(600)
             button.setFixedHeight(70)
             button.setFont(QtGui.QFont("Sylfaen", 14))
+            button.setStyleSheet("""
+                QPushButton {
+                    background-color: #5c6671;
+                    color: white;
+                    border: 2px solid #3a4250;
+                    border-radius: 8px;
+                }
+                QPushButton:hover {
+                    background-color: #6c7785;
+                }
+            """)
             button_layout.addWidget(button)
-            # Важно: передаем индекс i, чтобы потом проверить правильность
             button.clicked.connect(partial(self.check_answer, q_data, i))
 
-        main_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        button_layout.setContentsMargins(0, 0, 0, 150)
-        main_layout.addLayout(button_layout)
-        # 3. Устанавливаем размер и положение кнопки
+        center_layout.addLayout(button_layout)
 
+        # Добавляем центральный виджет с растяжкой
+        main_layout.addWidget(center_widget, 1)  # stretch factor = 1
 
+        # Нижняя панель с прогрессом
+        bottom_widget = QtWidgets.QWidget()
+        bottom_layout = QtWidgets.QHBoxLayout(bottom_widget)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 5. Прогресс-бар (PRbox)
         pr_text = f"Вопрос {self.current_index + 1} из {len(self.all_questions)}"
         prog_box = QtWidgets.QTextEdit(pr_text)
-        prog_box.setText(pr_text)
-        main_layout.addWidget(prog_box)
+        prog_box.setFont(QtGui.QFont("Sylfaen", 14))
+        prog_box.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        prog_box.setTextColor("#F0F8FF")
+        prog_box.setStyleSheet("background-color: rgba(255, 0, 0, 0); border: none;")
+        prog_box.setReadOnly(True)
+        prog_box.setFixedHeight(40)
+        prog_box.setFixedWidth(300)
 
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(prog_box)
+        bottom_layout.addStretch()
 
-    def displayQA(self):
-
-        self.stacked_widget.setCurrentIndex(2)
-        # --- ПОЛНАЯ ОЧИСТКА ---
-        # --- ОЧИСТКА ДЛЯ PYSIDE6 ---
-
-        # --- ОЧИСТКА БЕЗ SHIBOKEN (Универсальный способ) ---
-        if self.page_test.layout() is not None:
-            old_layout = self.page_test.layout()
-
-            # Удаляем все виджеты
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
-                elif item.layout():
-                    self.clear_layout(item.layout())  # Вызываем ваш вспомогательный метод
-
-            # Вместо shiboken.delete мы "переносим" лайаут на временный объект,
-            # который тут же уничтожится, забирая лайаут с собой.
-            QtWidgets.QWidget().setLayout(old_layout)
-
-        self.page_test.setStyleSheet("background-color: #7393b3;")
-        main_layout = QtWidgets.QVBoxLayout(self.page_test)
-
-        # Проверка: остались ли еще вопросы?
-        if self.current_index >= len(self.question_ids):
-            self.end_of_the_test()
-            return
-
-        # 2. Получаем текущий вопрос
-        current_id = self.question_ids[self.current_index]
-        q_data = self.all_questions[str(current_id)]
-
-        # 3. Отрисовка вопроса
-        question = QtWidgets.QTextEdit(q_data["text"].strip('"'))
-        question.setFont(QtGui.QFont("Sylfaen", 32, italic=True))
-        question.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        question.setTextColor("#F0F8FF")
-        question.setStyleSheet( "background-color: rgba(255, 0, 0, 0); border:  none");  # последний параметр rgba - прозрачность
-        question.setReadOnly(True)  # Запрет на изменение текста
-        question.setFixedHeight(250)  # размеры
-        main_layout.addWidget(question)
-        main_layout.setContentsMargins(0, 50, 0, 0)
-
-        # 4. Отрисовка кнопок ответов
-        answers_list = q_data["answers"].split("|")
-        width, height = 1000, 800
-        work_height = height - 350
-
-        button_layout = QtWidgets.QVBoxLayout()
-
-        for i in range(len(answers_list)):
-            button = QtWidgets.QPushButton(answers_list[i], self)
-            button.setFixedWidth(500)
-            button.setFixedHeight(70)
-            button.setFont(QtGui.QFont("Sylfaen", 14))
-            button_layout.addWidget(button)
-            # Важно: передаем индекс i, чтобы потом проверить правильность
-            button.clicked.connect(partial(self.check_answer, q_data, i))
-
-        main_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        button_layout.setContentsMargins(0, 0, 0, 150)
-        main_layout.addLayout(button_layout)
-        # 3. Устанавливаем размер и положение кнопки
-
-
-
-        # 5. Прогресс-бар (PRbox)
-        pr_text = f"Вопрос {self.current_index + 1} из {len(self.all_questions)}"
-        prog_box = QtWidgets.QTextEdit(pr_text)
-        prog_box.setText(pr_text)
-        main_layout.addWidget(prog_box)
+        main_layout.addWidget(bottom_widget)
 
     def check_answer(self, que, n):
         tr_an = str(que["true_answer"]).strip()
@@ -623,12 +733,12 @@ class MyWidget(QtWidgets.QWidget): #окно
     def on_ai_error(self, error_message):
         print(f"Ошибка AI: {error_message}")
 
-
-
     @QtCore.Slot()
     def open_add_question_dialog(self):
-        dialog = AddQuestionDialog(self)
-        dialog.exec()
+        password_dialog = PasswordDialog(self)
+        if password_dialog.exec() == QDialog.Accepted:
+            dialog = AddQuestionDialog(self)
+            dialog.exec()
 
     @QtCore.Slot()
     #действие "скачать"
@@ -636,6 +746,24 @@ class MyWidget(QtWidgets.QWidget): #окно
         # Создаем и открываем модальное окно
         self.menu = DownloadMenu("project.db")
         self.menu.exec()
+
+    def exit_to_main_menu(self):
+        """Выход в главное меню с очисткой всех данных"""
+        # Останавливаем поток AI, если он запущен
+        if hasattr(self, 'thread') and isinstance(self.thread, QtCore.QThread):
+            if self.thread.isRunning():
+                self.thread.quit()
+                self.thread.wait()
+
+        # Сбрасываем прогресс теста
+        self.user_progress_right = []
+        self.user_progress_wrong = []
+        self.current_index = 0
+        self.question_ids = []
+        self.all_questions = {}
+
+        # Переключаемся на главную страницу
+        self.setup_main_page()
 
 
 ### ДАЛЬШЕ ТОКА МУСОР !!!
