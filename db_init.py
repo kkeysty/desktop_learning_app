@@ -1,4 +1,5 @@
 import sqlite3
+DB_PATH = 'project.db'
 
 # 1. Функция помощник
 def get_or_create(cursor, table, name, parent_col=None, parent_id=None):
@@ -190,6 +191,10 @@ def fill_resources_table():
     conn.commit()
     conn.close()
     print("Таблица resources успешно заполнена информацией о файлах.")
+
+
+
+
 
 
 if __name__ == "__main__":

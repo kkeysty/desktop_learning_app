@@ -64,7 +64,7 @@ class PasswordDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Требуется авторизация")
         self.setFixedSize(400, 200)
-        self.setStyleSheet("background-color: #2b2b2b; color: #f0f8ff;")
+        self.setStyleSheet("background-color: white; color: black;")
 
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -83,8 +83,8 @@ class PasswordDialog(QDialog):
         self.password_input.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.password_input.setStyleSheet("""
             QLineEdit {
-                background-color: #3c3f41;
-                color: white;
+                background-color: white;
+                color: black;
                 border: 1px solid #555;
                 border-radius: 4px;
                 padding: 8px;
@@ -335,8 +335,8 @@ class MyWidget(QtWidgets.QWidget): #окно
         self.test_tree.setHeaderLabel("Скачанные материалы")
         self.test_tree.setStyleSheet("""
             QTreeWidget {
-                background-color: #121212;
-                color: #FFFFFF;
+                background-color: white;
+                color: black;
                 border: 1px solid #444;
                 font-size: 14px;
             }
@@ -348,8 +348,8 @@ class MyWidget(QtWidgets.QWidget): #окно
                 background-color: #333333;
             }
             QHeaderView::section {
-                background-color: #1f1f1f;
-                color: white;
+                background-color: white;
+                color: black;
                 padding: 4px;
                 border: 1px solid #444;
             }
@@ -843,6 +843,7 @@ class MyWidget(QtWidgets.QWidget): #окно
 
 
 class DownloadMenu(QDialog):
+
     def __init__(self, db_path):
         super().__init__()
         self.setWindowTitle("Выбор материалов для скачивания")
@@ -854,143 +855,148 @@ class DownloadMenu(QDialog):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
-        # Дерево выбора
         self.tree = QTreeWidget()
         self.tree.setHeaderLabel("Доступные материалы")
+        self.tree.setStyleSheet("background: white; border: none; color: black")
         layout.addWidget(self.tree)
 
-        # Кнопка скачать
         self.btn_download = QPushButton("Скачать выбранное")
         self.btn_download.clicked.connect(self.start_download)
         layout.addWidget(self.btn_download)
 
     def load_data(self):
         try:
-            # Делаем запрос к локальному серверу
-            # Сервер должен вернуть структуру в формате JSON
-            response = requests.get("http://127.0.0.1:5000/get_structure") #наш локальный сайт
+            response = requests.get("http://127.0.0.1:5000/get_structure")
             if response.status_code == 200:
-                data = response.json()  # Ожидаем список объектов
+                data = response.json()
 
-                #вывод списков
                 for subject in data:
                     s_item = QTreeWidgetItem(self.tree, [subject['name']])
-                    s_item.setFlags(s_item.flags() | QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsAutoTristate)
+                    s_item.setFlags(
+                        s_item.flags()
+                        | QtCore.Qt.ItemIsUserCheckable
+                        | QtCore.Qt.ItemIsAutoTristate
+                    )
                     s_item.setCheckState(0, QtCore.Qt.Unchecked)
-                    s_item.setData(0, QtCore.Qt.UserRole, {"type": "subject", "id": subject['id']})
+                    s_item.setData(
+                        0,
+                        QtCore.Qt.UserRole,
+                        {"type": "subject", "id": subject['id']},
+                    )
 
                     for section in subject.get('sections', []):
                         sec_item = QTreeWidgetItem(s_item, [section['name']])
-                        sec_item.setFlags(sec_item.flags() | QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsAutoTristate)
+                        sec_item.setFlags(
+                            sec_item.flags()
+                            | QtCore.Qt.ItemIsUserCheckable
+                            | QtCore.Qt.ItemIsAutoTristate
+                        )
                         sec_item.setCheckState(0, QtCore.Qt.Unchecked)
-                        sec_item.setData(0, QtCore.Qt.UserRole, {"type": "section", "id": section['id']})
+                        sec_item.setData(
+                            0,
+                            QtCore.Qt.UserRole,
+                            {"type": "section", "id": section['id']},
+                        )
 
                         for topic in section.get('topics', []):
                             t_item = QTreeWidgetItem(sec_item, [topic['name']])
-                            t_item.setFlags(t_item.flags() | QtCore.Qt.ItemIsUserCheckable)
+                            t_item.setFlags(
+                                t_item.flags() | QtCore.Qt.ItemIsUserCheckable
+                            )
                             t_item.setCheckState(0, QtCore.Qt.Unchecked)
-                            t_item.setData(0, QtCore.Qt.UserRole, {"type": "topic", "id": topic['id']})
+                            t_item.setData(
+                                0,
+                                QtCore.Qt.UserRole,
+                                {"type": "topic", "id": topic['id']},
+                            )
             else:
                 print("Ошибка сервера:", response.status_code)
         except Exception as e:
             print(f"Не удалось подключиться к серверу: {e}")
 
     def get_item_path(self, item):
-        """Рекурсивно собирает путь из названий элементов дерева"""
+        """Рекурсивно собирает путь из названий элементов дерева (только папки)"""
         path_parts = []
-        current = item
+        # Начинаем с родителя, чтобы сама тема (файл) не создавалась как папка
+        current = item.parent()
         while current:
-            # Убираем символы, которые запрещены в именах папок ОС
             name = re.sub(r'[\\/*?:"<>|]', "", current.text(0))
             path_parts.append(name)
             current = current.parent()
 
-        # Разворачиваем список (от Предмета к Теме) и объединяем в путь
-        return os.path.join("downloads", *reversed(path_parts))
-
-    def get_item_path(self, item):
-        """Рекурсивно собирает путь из названий элементов дерева"""
-        path_parts = []
-        current = item
-        while current:
-            # Убираем символы, которые запрещены в именах папок ОС
-            name = re.sub(r'[\\/*?:"<>|]', "", current.text(0))
-            path_parts.append(name)
-            current = current.parent()
-
-        # Разворачиваем список (от Предмета к Теме) и объединяем в путь
         return os.path.join("downloads", *reversed(path_parts))
 
     def start_download(self):
         it = QTreeWidgetItemIterator(self.tree, QTreeWidgetItemIterator.Checked)
+        has_files = False
 
         while it.value():
             item = it.value()
             data = item.data(0, QtCore.Qt.UserRole)
 
-            # Скачиваем только если это конечная тема (или файл)
-            if data["type"] == "topic":
+            if data and data.get("type") == "topic":
+                has_files = True
                 topic_id = data["id"]
 
-                # 1. Создаем структуру папок на основе дерева в UI
+                # 1. Получаем путь к папке (например: downloads/Математика/Алгебра)
                 target_dir = self.get_item_path(item)
                 if not os.path.exists(target_dir):
                     os.makedirs(target_dir)
 
                 try:
-                    # 2. Запрашиваем сервер. Сервер теперь должен использовать таблицу resources
-                    # чтобы найти путь к файлу и его оригинальное имя
                     url = f"http://127.0.0.1:5000/download/{topic_id}"
                     response = requests.get(url, stream=True)
 
                     if response.status_code == 200:
-                        # Достаем имя файла из заголовка Content-Disposition (его должен прислать сервер)
-                        # Если сервер его не прислал, используем стандартное имя
-                        content_disp = response.headers.get('Content-Disposition')
+                        # 2. Безопасное извлечение имени файла
+                        content_disp = response.headers.get(
+                            'Content-Disposition'
+                        )
+                        filename = None
+
                         if content_disp:
-                            filename = re.findall("filename=(.+)", content_disp)[0].strip('"')
-                        else:
+                            # Ищем filename="имя.расширение" или filename=имя.расширение
+                            match = re.search(
+                                r'filename=["\']?([^"\';]+)["\']?', content_disp
+                            )
+                            if match:
+                                filename = match.group(1).strip()
+
+                        if not filename:
                             filename = f"topic_{topic_id}.db"
 
                         full_file_path = os.path.join(target_dir, filename)
 
+                        # 3. Запись файла на диск
                         with open(full_file_path, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
+                            for chunk in response.iter_content(
+                                chunk_size=8192
+                            ):
                                 f.write(chunk)
-                        print(f"Сохранено в: {full_file_path}")
+                        print(f"Успешно сохранено в: {full_file_path}")
                     else:
-                        print(f"Ошибка сервера для ID {topic_id}")
+                        print(
+                            f"Ошибка сервера для ID {topic_id}: статус {response.status_code}"
+                        )
 
+                except requests.exceptions.ConnectionError:
+                    print("Ошибка: Сервер не запущен!")
+                    break
                 except Exception as e:
                     print(f"Ошибка при скачивании {topic_id}: {e}")
 
             it += 1
 
-
-
-
+        if not has_files:
+            print("Вы не выбрали ни одной темы для скачивания.")
 
 class AddQuestionDialog(QDialog):
-    """
-    Диалог добавления нового вопроса в локальную базу данных.
-
-    Структура downloads/:
-        downloads/
-          <Предмет>/
-            <Раздел>/
-              <Тема>/
-                <тема>.db  (таблица local_questions: text, options, answer)
-
-    Пользователь может:
-      • Выбрать существующую тему из дерева папок downloads
-      • Или ввести вручную Предмет / Раздел / Тему (создадутся автоматически)
-    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Добавить вопрос")
         self.resize(600, 700)
-        self.setStyleSheet("background-color: #2b2b2b; color: #f0f8ff;")
+        self.setStyleSheet("background-color: white; color: black;")
         self.answer_radios = []
         self.answers_group = QtWidgets.QButtonGroup(self)
         self.answers_group.setExclusive(True)
@@ -1004,13 +1010,13 @@ class AddQuestionDialog(QDialog):
         root.setSpacing(10)
         root.setContentsMargins(20, 20, 20, 20)
 
-        label_style = "font-size: 13px; font-weight: bold; color: #cce0ff;"
+        label_style = "font-size: 13px; font-weight: bold; color: black;"
         input_style = (
-            "background-color: #3c3f41; color: white; "
+            "background-color: white; color: black; "
             "border: 1px solid #555; border-radius: 4px; padding: 4px;"
         )
         btn_style = (
-            "background-color: #5c6671; color: white; "
+            "background-color: white; color: black; "
             "border: 2px solid #888; border-radius: 4px; padding: 6px;"
         )
 
@@ -1021,7 +1027,7 @@ class AddQuestionDialog(QDialog):
         self.tree.setHeaderLabel("downloads/")
         self.tree.setFixedHeight(180)
         self.tree.setStyleSheet(
-            "QTreeWidget { background: #1e1e1e; color: white; border: 1px solid #555; }"
+            "QTreeWidget { background: white; color: black; border: 1px solid #555; }"
             "QTreeWidget::item:selected { background: #3a5f8a; }"
         )
         self._populate_tree()
@@ -1126,7 +1132,7 @@ class AddQuestionDialog(QDialog):
         rb = QtWidgets.QCheckBox(f"Правильный ответ {idx + 1}")
         rb.setStyleSheet("""
             QCheckBox {
-                color: #aaffaa;
+                color: #5F8575;
                 font-size: 14px;
                 font-weight: bold;
                 spacing: 8px;
