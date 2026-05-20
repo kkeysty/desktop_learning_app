@@ -4,78 +4,88 @@ from flask import Flask, jsonify, send_file
 
 app = Flask(__name__)
 
-DB_PATH = 'project.db'
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-STORAGE_DIR = os.path.join(BASE_DIR, 'materials')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Указываем на тот же самый файл project.db в папке server
+DB_PATH = os.path.join(BASE_DIR, 'project.db')
 
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Чтобы обращаться к полям по именам
+    conn.row_factory = sqlite3.Row  # Позволяет обращаться к полям по именам: row['name']
     return conn
 
 
+# 1. ЭНДПОИНТ ДЛЯ ПОСТРОЕНИЯ ДЕРЕВА (Именно его запрашивает твой load_data)
 @app.route('/get_structure', methods=['GET'])
 def get_structure():
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    # 1. Получаем все предметы
-    cursor.execute("SELECT id, name FROM subjects")
-    subjects = [dict(row) for row in cursor.fetchall()]
+        # Шаг 1: Получаем все предметы
+        cursor.execute("SELECT id, name FROM subjects")
+        subjects = [dict(row) for row in cursor.fetchall()]
 
-    for subject in subjects:
-        # 2. Для каждого предмета ищем его секции
-        cursor.execute(
-            "SELECT id, name FROM sections WHERE subject_id = ?",
-            (subject['id'],),
-        )
-        sections = [dict(row) for row in cursor.fetchall()]
-        subject['sections'] = sections
+        for subject in subjects:
+            # Шаг 2: Получаем разделы для текущего предмета
+            cursor.execute("SELECT id, name FROM sections WHERE subject_id = ?", (subject['id'],))
+            sections = [dict(row) for row in cursor.fetchall()]
+            subject['sections'] = sections
 
-        for section in sections:
-            # 3. Для каждой секции ищем её темы
-            cursor.execute(
-                "SELECT id, name FROM topics WHERE section_id = ?",
-                (section['id'],),
-            )
-            topics = [dict(row) for row in cursor.fetchall()]
-            section['topics'] = topics
+            for section in sections:
+                # Шаг 3: Получаем темы для каждого раздела
+                cursor.execute("SELECT id, name FROM topics WHERE section_id = ?", (section['id'],))
+                section['topics'] = [dict(row) for row in cursor.fetchall()]
 
-    conn.close()
-    return jsonify(subjects)
+        conn.close()
+        return jsonify(subjects), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/download/<int:topic_id>', methods=['GET'])
-def download_file(topic_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
+# 2. ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ СПИСКА РЕСУРСОВ ТЕМЫ (Запрашивает start_download)
+@app.route('/get_resources/<int:topic_id>', methods=['GET'])
+def get_resources(topic_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    # Сначала всё же проверяем таблицу resources (на всякий случай)
-    cursor.execute("SELECT file_path, file_name FROM resources WHERE parent_id = ? AND parent_type = 'topic'",
-                   (topic_id,))
-    res = cursor.fetchone()
-    conn.close()
+        # Выбираем файлы, привязанные к конкретной теме
+        cursor.execute("SELECT id, file_name FROM resources WHERE topic_id = ?", (topic_id,))
+        resources = [dict(row) for row in cursor.fetchall()]
 
-    if res:
-        server_path, original_name = res
-        if not os.path.isabs(server_path):
-            server_path = os.path.join(BASE_DIR, server_path)
-        if os.path.exists(server_path):
-            return send_file(server_path, download_name=original_name, as_attachment=True)
+        conn.close()
+        return jsonify(resources), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    # --- ЕСЛИ В БД НЕТ ЗАПИСИ: Ищем файл topic_X.db рекурсивно во всех подпапках ---
-    target_filename = f"topic_{topic_id}.db"
 
-    # os.walk полностью обходит materials, включая subject_id_X и section_id_Y
-    for root, dirs, files in os.walk(STORAGE_DIR):
-        if target_filename in files:
-            full_path = os.path.join(root, target_filename)
-            # Отправляем найденный файл .db
-            return send_file(full_path, download_name=target_filename, as_attachment=True)
+# 3. ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ КОНКРЕТНОГО ФАЙЛА (Отдает .db или .pdf)
+@app.route('/download/resource/<int:resource_id>', methods=['GET'])
+def download_resource(resource_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path, file_name FROM resources WHERE id = ?", (resource_id,))
+        res = cursor.fetchone()
+        conn.close()
 
-    # Если нигде не нашли
-    return jsonify({"error": f"Файл topic_{topic_id}.db не найден ни в одной из подпапок materials"}), 404
+        if not res:
+            return jsonify({"error": "Ресурс не найден в базе данных"}), 404
+
+        # Переводим сохраненный относительный путь в абсолютный
+        file_path = os.path.abspath(res['file_path'])
+
+        if os.path.exists(file_path):
+            return send_file(file_path, download_name=res['file_name'], as_attachment=True)
+        else:
+            return jsonify({"error": f"Файл физически отсутствует на сервере по пути: {file_path}"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
+    # Запускаем сервер на локальном порту 5000
     app.run(host='127.0.0.1', port=5000, debug=True)

@@ -934,61 +934,52 @@ class DownloadMenu(QDialog):
             item = it.value()
             data = item.data(0, QtCore.Qt.UserRole)
 
+            # Проверяем, что выбрана именно тема (конечный узел дерева)
             if data and data.get("type") == "topic":
                 has_files = True
                 topic_id = data["id"]
 
-                # 1. Получаем путь к папке (например: downloads/Математика/Алгебра)
+                # Генерируем красивый путь сохранения на основе дерева PyQt
+                # Результат: downloads/Безопасность компьютерных систем/Криптография/
                 target_dir = self.get_item_path(item)
                 if not os.path.exists(target_dir):
                     os.makedirs(target_dir)
 
                 try:
-                    url = f"http://127.0.0.1:5000/download/{topic_id}"
-                    response = requests.get(url, stream=True)
-
+                    # Шаг 1: Спрашиваем у Flask список файлов для этой темы
+                    response = requests.get(f"http://127.0.0.1:5000/get_resources/{topic_id}")
                     if response.status_code == 200:
-                        # 2. Безопасное извлечение имени файла
-                        content_disp = response.headers.get(
-                            'Content-Disposition'
-                        )
-                        filename = None
+                        files_list = response.json()  # Массив вида [{'id': 1, 'file_name': 'topic_5.db'}, ...]
 
-                        if content_disp:
-                            # Ищем filename="имя.расширение" или filename=имя.расширение
-                            match = re.search(
-                                r'filename=["\']?([^"\';]+)["\']?', content_disp
-                            )
-                            if match:
-                                filename = match.group(1).strip()
+                        # Шаг 2: Скачиваем каждый файл из списка в целевую папку
+                        for file_info in files_list:
+                            r_id = file_info['id']
+                            name = file_info['file_name']
 
-                        if not filename:
-                            filename = f"topic_{topic_id}.db"
-
-                        full_file_path = os.path.join(target_dir, filename)
-
-                        # 3. Запись файла на диск
-                        with open(full_file_path, 'wb') as f:
-                            for chunk in response.iter_content(
-                                chunk_size=8192
-                            ):
-                                f.write(chunk)
-                        print(f"Успешно сохранено в: {full_file_path}")
+                            file_res = requests.get(f"http://127.0.0.1:5000/download/resource/{r_id}", stream=True)
+                            if file_res.status_code == 200:
+                                save_path = os.path.join(target_dir, name)
+                                with open(save_path, 'wb') as f:
+                                    for chunk in file_res.iter_content(chunk_size=8192):
+                                        f.write(chunk)
+                                print(f"Успешно скачан: {name} -> {target_dir}")
                     else:
-                        print(
-                            f"Ошибка сервера для ID {topic_id}: статус {response.status_code}"
-                        )
-
-                except requests.exceptions.ConnectionError:
-                    print("Ошибка: Сервер не запущен!")
-                    break
+                        print(f"Не удалось получить ресурсы для темы {topic_id}")
                 except Exception as e:
-                    print(f"Ошибка при скачивании {topic_id}: {e}")
+                    print(f"Ошибка сети: {e}")
 
             it += 1
 
         if not has_files:
-            print("Вы не выбрали ни одной темы для скачивания.")
+            print("Пожалуйста, выделите темы галочками.")
+
+
+
+
+
+
+
+
 
 class AddQuestionDialog(QDialog):
 
