@@ -338,7 +338,7 @@ class MyWidget(QtWidgets.QWidget): #окно
                 background-color: white;
                 color: black;
                 border: 1px solid #444;
-                font-size: 14px;
+                font-size: 18px;
             }
             QTreeWidget::item {
                 padding: 5px;
@@ -766,11 +766,6 @@ class MyWidget(QtWidgets.QWidget): #окно
         self.setup_main_page()
 
 
-### ДАЛЬШЕ ТОКА МУСОР !!!
-
-
-
-
 
 
 
@@ -798,9 +793,6 @@ class MyWidget(QtWidgets.QWidget): #окно
 
 
 
-
-#это треш. я ничего не вынесла из курса ооп.
-#я продолжу походу переодически создавать новые окна АААА
 
 
 
@@ -857,7 +849,7 @@ class DownloadMenu(QDialog):
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabel("Доступные материалы")
-        self.tree.setStyleSheet("background: white; border: none; color: black")
+        self.tree.setStyleSheet("background: white; border: none; color: black; font-size: 18pt;")
         layout.addWidget(self.tree)
 
         self.btn_download = QPushButton("Скачать выбранное")
@@ -1018,7 +1010,7 @@ class AddQuestionDialog(QDialog):
         self.tree.setHeaderLabel("downloads/")
         self.tree.setFixedHeight(180)
         self.tree.setStyleSheet(
-            "QTreeWidget { background: white; color: black; border: 1px solid #555; }"
+            "QTreeWidget { background: white; color: black; border: 1px solid #555; font-size: 18pt; }"
             "QTreeWidget::item:selected { background: #3a5f8a; }"
         )
         self._populate_tree()
